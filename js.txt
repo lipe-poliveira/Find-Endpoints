@@ -8,22 +8,23 @@
         bottom: "0",
         left: "0",
         width: "100%",
-        maxHeight: "50%",
-        overflowY: "scroll",
+        maxHeight: "50vh",
+        overflowY: "auto",
         backgroundColor: "#f8f9fa",
         color: "#212529",
-        padding: "10px",
+        padding: "15px",
         zIndex: "9999",
         borderTop: "2px solid black",
-        fontFamily: "Arial, sans-serif"
+        fontFamily: "Arial, sans-serif",
+        boxShadow: "0px -2px 10px rgba(0, 0, 0, 0.2)"
     });
+
     scanningDiv.innerHTML = "<h4>🔍 Escaneando recursos...</h4>";
     document.body.appendChild(scanningDiv);
 
     let foundPaths = new Set();
     let processedURLs = new Set();
 
-    // Função para validar se é um caminho relativo válido
     function isValidPath(path) {
         return (
             path &&
@@ -34,13 +35,12 @@
         );
     }
 
-    // Busca e processa um recurso
     async function fetchAndExtract(url) {
         if (processedURLs.has(url)) return;
         processedURLs.add(url);
 
         try {
-            const response = await fetch(url);
+            const response = await fetch(url, { cache: "no-store" });
             if (!response.ok) {
                 console.warn(`❌ Falha ao acessar ${url}: ${response.status}`);
                 return;
@@ -52,32 +52,35 @@
         }
     }
 
-    // Extrai caminhos relativos do código-fonte
     function extractPaths(content) {
-        let matches = [...content.matchAll(/['"]((?:\/|\.\.\/|\.\/)[^'"]+)['"]/g)];
+        let regex = /['"`]((?:\/|\.\.\/|\.\/)[^"'`\s]+)['"`]/g;
+        let matches = content.matchAll(regex);
         for (let match of matches) {
-            let path = match[1];
+            let path = match[1].split("?")[0]; // Remover parâmetros da URL
             if (isValidPath(path)) foundPaths.add(path);
         }
     }
 
-    // Coleta os recursos carregados na página
     let resources = performance.getEntriesByType("resource").map((res) => res.name);
-    for (let res of resources) {
-        await fetchAndExtract(res);
-    }
+    await Promise.all(resources.map(fetchAndExtract));
 
-    // Exibir os resultados
     scanningDiv.innerHTML = `
         <h4>🔍 Caminhos Relativos Encontrados (${foundPaths.size}):</h4>
-        <ul>${[...foundPaths].map((p) => `<li>${p}</li>`).join("")}</ul>
-        <button id="copyResults">📋 Copiar para Área de Transferência</button>
+        <ul style="max-height: 200px; overflow-y: auto; font-size: 14px; list-style: none; padding: 0;">
+            ${[...foundPaths].map((p) => `<li style="padding: 3px 0;">📂 ${p}</li>`).join("")}
+        </ul>
+        <button id="copyResults" style="padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">📋 Copiar para Área de Transferência</button>
     `;
 
-    // Botão de cópia
-    document.getElementById("copyResults").addEventListener("click", () => {
-        navigator.clipboard.writeText([...foundPaths].join("\n"));
-        alert("📋 Caminhos copiados!");
+    document.getElementById("copyResults").addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText([...foundPaths].join("\n"));
+            let button = document.getElementById("copyResults");
+            button.textContent = "✅ Copiado!";
+            setTimeout(() => (button.textContent = "📋 Copiar para Área de Transferência"), 2000);
+        } catch (error) {
+            alert("❌ Erro ao copiar para a área de transferência.");
+        }
     });
 
 })();
