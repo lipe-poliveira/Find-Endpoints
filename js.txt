@@ -1,0 +1,83 @@
+(async function () {
+    console.log("🔍 Iniciando escaneamento...");
+
+    // Criando interface na página
+    let scanningDiv = document.createElement("div");
+    Object.assign(scanningDiv.style, {
+        position: "fixed",
+        bottom: "0",
+        left: "0",
+        width: "100%",
+        maxHeight: "50%",
+        overflowY: "scroll",
+        backgroundColor: "#f8f9fa",
+        color: "#212529",
+        padding: "10px",
+        zIndex: "9999",
+        borderTop: "2px solid black",
+        fontFamily: "Arial, sans-serif"
+    });
+    scanningDiv.innerHTML = "<h4>🔍 Escaneando recursos...</h4>";
+    document.body.appendChild(scanningDiv);
+
+    let foundPaths = new Set();
+    let processedURLs = new Set();
+
+    // Função para validar se é um caminho relativo válido
+    function isValidPath(path) {
+        return (
+            path &&
+            (path.startsWith("/") || path.startsWith("./") || path.startsWith("../")) &&
+            !/[^\x20-\x7E]/.test(path) && // Apenas caracteres ASCII visíveis
+            path.length > 1 &&
+            path.length < 200
+        );
+    }
+
+    // Busca e processa um recurso
+    async function fetchAndExtract(url) {
+        if (processedURLs.has(url)) return;
+        processedURLs.add(url);
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                console.warn(`❌ Falha ao acessar ${url}: ${response.status}`);
+                return;
+            }
+            const text = await response.text();
+            extractPaths(text);
+        } catch (error) {
+            console.error(`⚠ Erro ao acessar ${url}:`, error);
+        }
+    }
+
+    // Extrai caminhos relativos do código-fonte
+    function extractPaths(content) {
+        let matches = [...content.matchAll(/['"]((?:\/|\.\.\/|\.\/)[^'"]+)['"]/g)];
+        for (let match of matches) {
+            let path = match[1];
+            if (isValidPath(path)) foundPaths.add(path);
+        }
+    }
+
+    // Coleta os recursos carregados na página
+    let resources = performance.getEntriesByType("resource").map((res) => res.name);
+    for (let res of resources) {
+        await fetchAndExtract(res);
+    }
+
+    // Exibir os resultados
+    scanningDiv.innerHTML = `
+        <h4>🔍 Caminhos Relativos Encontrados (${foundPaths.size}):</h4>
+        <ul>${[...foundPaths].map((p) => `<li>${p}</li>`).join("")}</ul>
+        <button id="copyResults">📋 Copiar para Área de Transferência</button>
+    `;
+
+    // Botão de cópia
+    document.getElementById("copyResults").addEventListener("click", () => {
+        navigator.clipboard.writeText([...foundPaths].join("\n"));
+        alert("📋 Caminhos copiados!");
+    });
+
+})();
